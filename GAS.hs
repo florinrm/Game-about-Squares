@@ -20,6 +20,9 @@ type Position = (Int, Int)
 data Color = Red | Blue | Gray
     deriving (Eq, Ord, Show)
 
+data Shape = Square | Circle | Arrow | Empty
+    deriving (Eq, Ord, Show)
+
 {-
     Orientările pătratelor și săgeților.
 -}
@@ -37,7 +40,10 @@ instance Show Heading where
 
     Un obiect de pe tabla de joc: pătrat/ cerc/ săgeată.
 -}
-data Object = UndefinedObject
+data Object = CreateSquare {orientation :: Char, color :: Char, shape :: Shape}
+            | CreateCircle {color :: Char, shape :: Shape}
+            | CreateArrow {direction :: Char, shape :: Shape}
+            | EmptyPos
     deriving (Eq, Ord)
 
 {-
@@ -46,7 +52,10 @@ data Object = UndefinedObject
     Reprezetarea textuală a unui obiect.
 -}
 instance Show Object where
-    show = undefined
+    show EmptyPos = "   "
+    show (CreateSquare orient col _) = [col] ++ [orient] ++ " "
+    show (CreateCircle col _) = "  " ++ [col]
+    show (CreateArrow dir _) = "  " ++ [dir]
 
 {-
     *** TODO ***
@@ -55,7 +64,8 @@ instance Show Object where
 
     Recomandăm Data.Map.Strict.
 -}
-data Level = UndefiedLevel
+
+data Level = CreateLevel {elements :: (M.Map Object Position)}
     deriving (Eq, Ord)
 
 {-
@@ -63,8 +73,15 @@ data Level = UndefiedLevel
 
     Reprezetarea textuală a unui nivel.
 -}
+
+getLengthLevel :: Level -> Int 
+getLengthLevel lvl = 1 + maximum (map fst (map snd (M.toList (elements lvl)))) - minimum (map fst (map snd (M.toList (elements lvl)))) 
+
+getHeightLevel :: Level -> Int 
+getHeightLevel lvl = 1 + maximum (map snd (map snd (M.toList (elements lvl)))) - minimum (map snd (map snd (M.toList (elements lvl)))) 
+
 instance Show Level where
-    show = undefined
+    show (CreateLevel mapping) = " "
 
 {-
     *** TODO ***
@@ -72,7 +89,7 @@ instance Show Level where
     Nivelul vid, fără obiecte.
 -}
 emptyLevel :: Level
-emptyLevel = undefined
+emptyLevel = CreateLevel (M.fromList [])
 
 {-
     *** TODO ***
@@ -80,7 +97,20 @@ emptyLevel = undefined
     Adaugă un pătrat cu caracteristicile date la poziția precizată din nivel.
 -}
 addSquare :: Color -> Heading -> Position -> Level -> Level
-addSquare = undefined
+addSquare color heading pos lvl 
+            | color == Red && heading == North = CreateLevel (M.insert (CreateSquare 'R' '^' Square) pos (elements lvl))
+            | color == Red && heading == East = CreateLevel (M.insert (CreateSquare 'R' '>' Square) pos (elements lvl))
+            | color == Red && heading == South = CreateLevel (M.insert (CreateSquare 'R' 'v' Square) pos (elements lvl))
+            | color == Red && heading == West = CreateLevel (M.insert (CreateSquare 'R' '<' Square) pos (elements lvl))
+            | color == Blue && heading == North = CreateLevel (M.insert (CreateSquare 'B' '^' Square) pos (elements lvl))
+            | color == Blue && heading == East = CreateLevel (M.insert (CreateSquare 'B' '>' Square) pos (elements lvl))
+            | color == Blue && heading == South = CreateLevel (M.insert (CreateSquare 'B' 'v' Square) pos (elements lvl))
+            | color == Blue && heading == West = CreateLevel (M.insert (CreateSquare 'B' '<' Square) pos (elements lvl))
+            | color == Gray && heading == North = CreateLevel (M.insert (CreateSquare 'G' '^' Square) pos (elements lvl))
+            | color == Gray && heading == East = CreateLevel (M.insert (CreateSquare 'G' '>' Square) pos (elements lvl))
+            | color == Gray && heading == South = CreateLevel (M.insert (CreateSquare 'G' 'v' Square) pos (elements lvl))
+            | color == Gray && heading == West = CreateLevel (M.insert (CreateSquare 'G' '<' Square) pos (elements lvl))
+            | otherwise = lvl
 
 {-
     *** TODO ***
@@ -88,7 +118,11 @@ addSquare = undefined
     Adaugă un cerc cu caracteristicile date la poziția precizată din nivel.
 -}
 addCircle :: Color -> Position -> Level -> Level
-addCircle = undefined
+addCircle color pos lvl
+            | color == Red = CreateLevel (M.insert (CreateCircle 'r' Circle) pos (elements lvl))
+            | color == Blue = CreateLevel (M.insert (CreateCircle 'b' Circle) pos (elements lvl))
+            | color == Gray = CreateLevel (M.insert (CreateCircle 'g' Circle) pos (elements lvl))
+            | otherwise = lvl
 
 {-
     *** TODO ***
@@ -96,7 +130,12 @@ addCircle = undefined
     Adaugă o săgeată cu caracteristicile date la poziția precizată din nivel.
 -}
 addArrow :: Heading -> Position -> Level -> Level
-addArrow = undefined
+addArrow heading pos lvl
+            | heading == North = CreateLevel (M.insert (CreateArrow '^' Arrow) pos (elements lvl))
+            | heading == East = CreateLevel (M.insert (CreateArrow '>' Arrow) pos (elements lvl))
+            | heading == South = CreateLevel (M.insert (CreateArrow 'v' Arrow) pos (elements lvl))
+            | heading == West = CreateLevel (M.insert (CreateArrow '<' Arrow) pos (elements lvl))
+            | otherwise = lvl
 
 {-
     *** TODO ***
@@ -104,10 +143,24 @@ addArrow = undefined
     Mută pătratul de la poziția precizată din nivel. Dacă la poziția respectivă
     nu se găsește un pătrat, întoarce direct parametrul.
 -}
+
+movePosition :: Position -> Object -> Position
+movePosition pos obj
+        | (orientation obj == '>') = ((fst pos) + 1, (snd pos))
+        | (orientation obj == '<') = ((fst pos) - 1, (snd pos))
+        | (orientation obj == '^') = ((fst pos), (snd pos) + 1)
+        | otherwise = ((fst pos), (snd pos) - 1)
+
 move :: Position  -- Poziția
      -> Level     -- Nivelul inițial
      -> Level     -- Nivelul final
-move = undefined
+move pos lvl =  --filter (\x -> shape (fst x) == Square && (snd x) == pos) (toList (elements lvl))
+    if res == [] then
+        lvl
+    else
+        CreateLevel (M.insert (fst (head res)) (movePosition pos (fst (head res))) (elements lvl)) 
+            where res = filter (\x -> shape (fst x) == Square && (snd x) == pos) (M.toList (elements lvl))
+
 
 {-
     *** TODO ***
