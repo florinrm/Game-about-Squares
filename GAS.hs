@@ -142,9 +142,9 @@ printCol lvl begin end curr line
                             else
                                 (printTwoShapes ((elements lvl) M.! pos)) ++ (printCol lvl begin end (curr + 1) line)
             | otherwise = if (length ((elements lvl) M.! pos)) /= 2
-                                    then (show (head ((elements lvl) M.! pos))) ++ " | " ++ (printCol lvl begin end (curr + 1) line)
+                                    then (show (head ((elements lvl) M.! pos))) ++ "|" ++ (printCol lvl begin end (curr + 1) line)
                             else
-                                (printTwoShapes ((elements lvl) M.! pos)) ++ " | " ++ (printCol lvl begin end (curr + 1) line)
+                                (printTwoShapes ((elements lvl) M.! pos)) ++ "|" ++ (printCol lvl begin end (curr + 1) line)
                                 where
                                     pos :: Position; pos = (line, curr)
 printLine :: Level -> Int -> Int -> Int -> [Char]
@@ -154,7 +154,7 @@ printLine lvl begin end curr
             | otherwise = (printCol lvl (getMinCol lvl) (getMaxCol lvl) (getMinCol lvl) curr) ++ "\n" ++ (printLine lvl begin end (curr + 1))
 
 printTable :: Level -> [Char]
-printTable lvl = printLine lvl (getMinLine lvl) (getMaxLine lvl) (getMinLine lvl)
+printTable lvl = printLine (fillIn lvl) (getMinLine (fillIn lvl)) (getMaxLine (fillIn lvl)) (getMinLine (fillIn lvl))
 
 instance Show Level where
     show (CreateLevel mapping) = printTable (CreateLevel mapping)
@@ -206,10 +206,10 @@ addArrow heading pos lvl
 
 movePosition :: Position -> Object -> Position
 movePosition pos obj
-        | (orientation obj == East) = ((fst pos) + 1, (snd pos))
-        | (orientation obj == West) = ((fst pos) - 1, (snd pos))
-        | (orientation obj == North) = ((fst pos), (snd pos) + 1)
-        | otherwise = ((fst pos), (snd pos) - 1)
+        | (orientation obj == East) = ((fst pos), (snd pos) + 1)
+        | (orientation obj == West) = ((fst pos), (snd pos) - 1)
+        | (orientation obj == North) = ((fst pos) - 1, (snd pos))
+        | otherwise = ((fst pos) + 1, (snd pos))  -- modific pozitia unui patrat
 
 data SquareCircle = SC {square :: Object, circle :: Object}
 
@@ -217,35 +217,89 @@ modifySquare :: Object -> Position -> Level -> Object
 modifySquare sqr pos level
             | res == [] = sqr
             | otherwise = CreateSquare (direction $ head $ res) (color sqr) Square
-                where res = filter (\x -> (shape x) == Arrow) ((elements level) M.! pos)
+                where res = filter (\x -> (shape x) == Arrow) ((elements level) M.! pos) -- modific directia unui patrat
     
+
+getSquares :: Level -> Position -> [Object]
+getSquares lvl pos = (filter (\x -> Square == (shape x)) ((elements lvl) M.! pos))
+
+getArrows :: Level -> Position -> [Object]
+getArrows lvl pos = (filter (\x -> Arrow == (shape x)) ((elements lvl) M.! pos))
+
+removeEmptyValues :: Level -> Position -> Level
+removeEmptyValues lvl pos
+    | ((elements lvl) M.!? pos) == Nothing = lvl
+    | ((elements lvl) M.! pos) == [] = CreateLevel (M.delete pos (elements lvl))
+    | otherwise = lvl
+
+-- muta patratul de la pozitia noua -> recursiv, ca sa dai push si la celelalte patrate
+
+modifySquarePos :: Level -> Position -> Object -> Level
+modifySquarePos lvl pos sqr
+            | ((elements lvl) M.!? pos) == Nothing = lvl
+            | sqr /= (head (getSquares lvl pos)) || [] == getSquares lvl pos = lvl
+            | ((elements lvl) M.!? (movePosition pos sqr)) == Nothing =  
+                    CreateLevel (M.insert (movePosition pos sqr) [sqr] (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements lvl)))
+            | [] == (getSquares lvl (movePosition pos sqr)) = 
+                if [] == (getArrows lvl (movePosition pos sqr))
+                    then CreateLevel (M.insert (movePosition pos sqr) 
+                            (sqr : ((elements lvl) M.! (movePosition pos sqr))) 
+                            (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements lvl)))
+                    else CreateLevel (M.insert (movePosition pos sqr) 
+                            ((modifySquare sqr (movePosition pos sqr) lvl) : ((elements lvl) M.! (movePosition pos sqr))) 
+                            (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements lvl)))
+
+            | otherwise =
+                if [] == (getArrows lvl (movePosition pos sqr))
+                    then CreateLevel (M.insert (movePosition pos sqr) 
+                            (sqr : ((elements lvl) M.! (movePosition pos sqr))) 
+                            (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements (modifySquarePos lvl (movePosition pos sqr) (head (getSquares lvl (movePosition pos sqr)))))))
+                    else CreateLevel (M.insert (movePosition pos sqr) 
+                            ((modifySquare sqr (movePosition pos sqr) lvl) : ((elements lvl) M.! (movePosition pos sqr))) 
+                            (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements (modifySquarePos lvl (movePosition pos sqr) (head (getSquares lvl (movePosition pos sqr)))))))
+            -- modifySquarePos lvl (movePosition pos sqr) (head (getSquares lvl (movePosition pos sqr)))
+--{
+
+findSouth :: Level -> Position -> Int -> Object -> [Object]
+
+{--
+    vad cum e directia patratului - sus, jos, stanga dreapta
+    daca e in jos - caut patratele de pe aceeasi coloana si le dau in jos pe toate+ automat schimb directia -> caut primul patrat de josul lui si o fac recursiv
+    analog 
+--}
 move :: Position  -- Poziția
      -> Level     -- Nivelul inițial
      -> Level     -- Nivelul final
-move pos lvl = undefined
 
-{-
-move pos lvl =  --filter (\x -> shape (fst x) == Square && (snd x) == pos) (toList (elements lvl))
-    if res == [] then
-        lvl
-    else
-        CreateLevel (M.insert (fst (head res)) (movePosition pos (fst (head res))) (elements lvl)) 
-            where res = filter (\x -> shape (fst x) == Square && (snd x) == pos) (M.toList (elements lvl))
+move pos lvl 
+    | ((elements lvl) M.!? pos) == Nothing = lvl
+    | [] == (getSquares lvl pos) = lvl  -- daca nu am patrat la pozitia data
+    | ((elements lvl) M.!? (movePosition pos (head (getSquares lvl pos)))) == Nothing =     -- > daca nu am exista pozitia noua
+        (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) [(head (getSquares lvl pos))] 
+            (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)
+    | [] == (getSquares lvl (movePosition pos (head (getSquares lvl pos)))) =  -- daca exista nu exista patrat la pozitia noua
+            if (getArrows lvl (movePosition pos (head (getSquares lvl pos)))) /= [] -- daca nu am sageti la pozitia noua
+                then (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) 
+                        ((modifySquare (head (getSquares lvl pos)) (movePosition pos (head (getSquares lvl pos))) lvl)
+                         : ((elements lvl) M.! (movePosition pos (head (getSquares lvl pos))))) 
+                        (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)--aww yiss
+                else (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) 
+                        ((head (getSquares lvl pos)) : ((elements lvl) M.! (movePosition pos (head (getSquares lvl pos))))) 
+                        (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)-- aww yiss
+    | otherwise = 
+            if (getArrows lvl (movePosition pos (head (getSquares lvl pos)))) /= [] -- daca nu am sageti la pozitia noua
+                then (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) 
+                        ((modifySquare (head (getSquares lvl pos)) (movePosition pos (head (getSquares lvl pos))) lvl)
+                        : ((elements lvl) M.! (movePosition pos (head (getSquares lvl pos))))) 
+                        (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)--aww yiss
+                else (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) 
+                        ((head (getSquares lvl pos))
+                        : ((elements lvl) M.! (movePosition pos (head (getSquares lvl pos))))) 
+                        (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)-- aww yiss
 
-move :: Position  -- Poziția
-     -> Level     -- Nivelul inițial
-     -> Level     -- Nivelul final
-
-move pos lvl =
-    if ((elements lvl) !? pos) == Nothing 
-        then lvl
-    else if [] == filter (\x -> (Square == (shape x)) ((elements lvl) ! pos)) 
-        then lvl
-    else if ((elements lvl) !? newPos) == Nothing
-        then CreateLevel (M.insert newPos [(head $ filter (\x -> (Square == (shape x)) ((elements lvl) ! pos)))] (M.insert pos (L.delete sqr ((elements lvl) ! pos))))
-    else CreateLevel (M.insert newPos)
-        
--}
+ -- (move (movePosition pos (head (getSquares lvl pos))) lvl)    
+  
+---}
 {-
     *** TODO ***
 
