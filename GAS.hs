@@ -9,6 +9,7 @@ import ProblemState
 import qualified Data.Map.Strict as M
 import Data.Char
 import qualified Data.List as L
+import qualified Data.Set as Set
 
 {-
     Pozițiile tablei de joc, în formă (linie, coloană), unde ambele coordonate
@@ -234,34 +235,66 @@ removeEmptyValues lvl pos
 
 -- muta patratul de la pozitia noua -> recursiv, ca sa dai push si la celelalte patrate
 
-modifySquarePos :: Level -> Position -> Object -> Level
-modifySquarePos lvl pos sqr
-            | ((elements lvl) M.!? pos) == Nothing = lvl
-            | sqr /= (head (getSquares lvl pos)) || [] == getSquares lvl pos = lvl
-            | ((elements lvl) M.!? (movePosition pos sqr)) == Nothing =  
-                    CreateLevel (M.insert (movePosition pos sqr) [sqr] (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements lvl)))
-            | [] == (getSquares lvl (movePosition pos sqr)) = 
-                if [] == (getArrows lvl (movePosition pos sqr))
-                    then CreateLevel (M.insert (movePosition pos sqr) 
-                            (sqr : ((elements lvl) M.! (movePosition pos sqr))) 
-                            (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements lvl)))
-                    else CreateLevel (M.insert (movePosition pos sqr) 
-                            ((modifySquare sqr (movePosition pos sqr) lvl) : ((elements lvl) M.! (movePosition pos sqr))) 
-                            (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements lvl)))
+data SomeData = CreateData {oldPos :: Position, newPos :: Position, obj :: Object} deriving (Eq, Ord)
+instance Show SomeData where
+    show (CreateData a b c) = (show a) ++ " " ++ (show b) ++ " " ++ (show c)
 
-            | otherwise =
-                if [] == (getArrows lvl (movePosition pos sqr))
-                    then CreateLevel (M.insert (movePosition pos sqr) 
-                            (sqr : ((elements lvl) M.! (movePosition pos sqr))) 
-                            (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements (modifySquarePos lvl (movePosition pos sqr) (head (getSquares lvl (movePosition pos sqr)))))))
-                    else CreateLevel (M.insert (movePosition pos sqr) 
-                            ((modifySquare sqr (movePosition pos sqr) lvl) : ((elements lvl) M.! (movePosition pos sqr))) 
-                            (M.insert pos (L.delete sqr ((elements lvl) M.! pos)) (elements (modifySquarePos lvl (movePosition pos sqr) (head (getSquares lvl (movePosition pos sqr)))))))
-            -- modifySquarePos lvl (movePosition pos sqr) (head (getSquares lvl (movePosition pos sqr)))
---{
+findSouthSquares :: Level -> Position -> [SomeData]
+findSouthSquares lvl pos
+        | ((elements lvl) M.!? pos) == Nothing = []
+        | [] == (getSquares lvl pos) = []
+        | otherwise = (CreateData pos newpos sqr) : (findSouthSquares lvl newpos)
+                    where sqr = (head (getSquares lvl pos))
+                          newpos :: Position; newpos = ((fst pos) + 1, (snd pos))
 
-findSouth :: Level -> Position -> Int -> Object -> [Object]
+findNorthSquares :: Level -> Position -> [SomeData]
+findNorthSquares lvl pos
+        | ((elements lvl) M.!? pos) == Nothing = []
+        | [] == (getSquares lvl pos) = []
+        | otherwise = (CreateData pos newpos sqr) : (findNorthSquares lvl newpos)
+                    where sqr = (head (getSquares lvl pos))
+                          newpos :: Position; newpos = ((fst pos) - 1, (snd pos))
 
+findEastSquares :: Level -> Position -> [SomeData]
+findEastSquares lvl pos
+        | ((elements lvl) M.!? pos) == Nothing = []
+        | [] == (getSquares lvl pos) = []
+        | otherwise = (CreateData pos newpos sqr) : (findEastSquares lvl newpos)
+                    where sqr = (head (getSquares lvl pos))
+                          newpos :: Position; newpos = ((fst pos), (snd pos) + 1)
+
+findWestSquares :: Level -> Position -> [SomeData]
+findWestSquares lvl pos
+        | ((elements lvl) M.!? pos) == Nothing = []
+        | [] == (getSquares lvl pos) = []
+        | otherwise = (CreateData pos newpos sqr) : (findWestSquares lvl newpos)
+                    where sqr = (head (getSquares lvl pos))
+                          newpos :: Position; newpos = ((fst pos), (snd pos) - 1)
+
+getSquareList :: Level -> Position -> Object -> [SomeData]
+getSquareList lvl pos obj
+        | Square /= (shape obj) = []
+        | North == (orientation obj) = findNorthSquares lvl pos
+        | South == (orientation obj) = findSouthSquares lvl pos
+        | West == (orientation obj) = findWestSquares lvl pos
+        | otherwise = findEastSquares lvl pos
+
+changePos :: Level -> Position -> Position -> Object -> Level
+changePos lvl oldpos newpos obj
+        | Square /= (shape obj) = lvl
+        | ((elements lvl) M.!? oldpos) == Nothing = lvl
+        | (notElem obj ((elements lvl) M.! oldpos)) = lvl
+        | ((elements lvl) M.!? newpos) == Nothing =
+            (removeEmptyValues (CreateLevel (M.insert newpos [obj] (M.insert oldpos (L.delete obj ((elements lvl) M.! oldpos)) (elements lvl)))) oldpos)
+        | otherwise = 
+            (removeEmptyValues (CreateLevel (M.insert newpos (newobj : ((elements lvl) M.! newpos)) (M.insert oldpos (L.delete obj ((elements lvl) M.! oldpos)) (elements lvl)))) oldpos)
+                where newobj = modifySquare obj newpos lvl
+
+changeAllPos :: Level -> [SomeData] -> Level
+changeAllPos lvl lst
+        | lst == [] = lvl
+        | otherwise = changePos (changeAllPos lvl (tail lst)) (oldPos res) (newPos res) (obj res)
+            where res = head lst
 {--
     vad cum e directia patratului - sus, jos, stanga dreapta
     daca e in jos - caut patratele de pe aceeasi coloana si le dau in jos pe toate+ automat schimb directia -> caut primul patrat de josul lui si o fac recursiv
@@ -286,17 +319,7 @@ move pos lvl
                 else (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) 
                         ((head (getSquares lvl pos)) : ((elements lvl) M.! (movePosition pos (head (getSquares lvl pos))))) 
                         (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)-- aww yiss
-    | otherwise = 
-            if (getArrows lvl (movePosition pos (head (getSquares lvl pos)))) /= [] -- daca nu am sageti la pozitia noua
-                then (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) 
-                        ((modifySquare (head (getSquares lvl pos)) (movePosition pos (head (getSquares lvl pos))) lvl)
-                        : ((elements lvl) M.! (movePosition pos (head (getSquares lvl pos))))) 
-                        (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)--aww yiss
-                else (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) 
-                        ((head (getSquares lvl pos))
-                        : ((elements lvl) M.! (movePosition pos (head (getSquares lvl pos))))) 
-                        (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)-- aww yiss
-
+    | otherwise = changeAllPos lvl (getSquareList lvl pos (head (getSquares lvl pos)))
  -- (move (movePosition pos (head (getSquares lvl pos))) lvl)    
   
 ---}
@@ -305,10 +328,36 @@ move pos lvl
 
     Instanțiați clasa `ProblemState` pentru jocul nostru.
 -}
-instance ProblemState Level Position where
-    successors = undefined
 
-    isGoal = undefined
+checkState :: [Object] -> Bool
+checkState lst
+        | 1 >= (length lst) = False
+        | (shape (head lst)) == Circle && (shape (last lst) == Square) = (color (head lst)) == (color (last lst))
+        | (shape (last lst)) == Circle && (shape (head lst) == Square) = (color (head lst)) == (color (last lst))
+        | otherwise = False
+
+numberOfSquares :: Level -> Int
+numberOfSquares lvl = length (filter (\x -> [] /= (getSquares lvl (fst x))) (M.toList (elements lvl)))
+
+numberValid :: Level -> Int
+numberValid lvl = length (filter (\x -> True == (checkState (snd x))) (M.toList (elements lvl)))
+
+getSquarePositions :: Level -> [Position]
+getSquarePositions lvl = map fst (filter (\x -> [] /= (getSquares lvl (fst x))) (M.toList (elements lvl)))
+
+buildSuccesors :: Level -> [Position] -> [(Position, Level)]
+buildSuccesors lvl pos = if [] == pos
+                            then []
+                         else
+                            ((head pos), (move (head pos) lvl)) : (buildSuccesors lvl (tail pos))   
+
+instance ProblemState Level Position where
+    successors lvl = buildSuccesors lvl (getSquarePositions lvl)
+
+    isGoal lvl = (numberOfSquares lvl) == (numberValid lvl)
 
     -- Doar petru BONUS
     -- heuristic =
+{--
+        iau patratul, vad ce directie are, iau o pereche ((pos_vechi, pos_nou), object) si fac insertie de pe poz veche pe poz noua (+ faza cu directia lel)
+--}
