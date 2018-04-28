@@ -82,6 +82,9 @@ data Level = CreateLevel {elements :: (M.Map Position [Object])}
     Reprezetarea textuală a unui nivel.
 -}
 
+replaceKeySelect :: Level -> Position -> Bool
+replaceKeySelect lvl pos = 0 == length (filter (\x -> (fst x) == pos) (M.toList (elements lvl)))
+
 getHeightLevel :: Level -> Int 
 getHeightLevel lvl = 1 + maximum (map fst (map fst (M.toList (elements lvl)))) - minimum (map fst (map fst (M.toList (elements lvl)))) 
 
@@ -101,7 +104,7 @@ getMinLine lvl = minimum (map fst (map fst (M.toList (elements lvl))))
 fillInColumn :: Level -> Int -> Int -> Int -> Level
 fillInColumn lvl begin end line
         | begin == (end + 1) = lvl
-        | ((elements lvl) M.!? pair) /= Nothing = fillInColumn lvl (begin + 1) end line
+        | (replaceKeySelect lvl pair) == False = fillInColumn lvl (begin + 1) end line
         | otherwise = CreateLevel (M.insert pair [EmptyPos] (elements (fillInColumn lvl (begin + 1) end line)))
             where pair :: Position; pair = (line, begin)
 
@@ -175,7 +178,7 @@ emptyLevel = CreateLevel (M.fromList [])
 -}
 addSquare :: Color -> Heading -> Position -> Level -> Level
 addSquare col heading pos lvl 
-    | ((elements lvl) M.!? pos) == Nothing =  CreateLevel (M.insert pos [(CreateSquare heading col Square)] (elements lvl))
+    | (replaceKeySelect lvl pos) == True =  CreateLevel (M.insert pos [(CreateSquare heading col Square)] (elements lvl))
     | otherwise = CreateLevel (M.insert pos ((CreateSquare heading col Square) : ((elements lvl) M.! pos)) (elements lvl))
 
 {-
@@ -185,7 +188,7 @@ addSquare col heading pos lvl
 -}
 addCircle :: Color -> Position -> Level -> Level
 addCircle col pos lvl    
-    | ((elements lvl) M.!? pos) == Nothing =  CreateLevel (M.insert pos [(CreateCircle col Circle)] (elements lvl))
+    | (replaceKeySelect lvl pos) == True =  CreateLevel (M.insert pos [(CreateCircle col Circle)] (elements lvl))
     | otherwise = CreateLevel (M.insert pos ((CreateCircle col Circle) : ((elements lvl) M.! pos)) (elements lvl))
 
 {-
@@ -195,7 +198,7 @@ addCircle col pos lvl
 -}
 addArrow :: Heading -> Position -> Level -> Level
 addArrow heading pos lvl    
-    | ((elements lvl) M.!? pos) == Nothing =  CreateLevel (M.insert pos [(CreateArrow heading Arrow)] (elements lvl))
+    | (replaceKeySelect lvl pos) == True =  CreateLevel (M.insert pos [(CreateArrow heading Arrow)] (elements lvl))
     | otherwise = CreateLevel (M.insert pos ((CreateArrow heading Arrow) : ((elements lvl) M.! pos)) (elements lvl))
 
 {-
@@ -229,7 +232,7 @@ getArrows lvl pos = (filter (\x -> Arrow == (shape x)) ((elements lvl) M.! pos))
 
 removeEmptyValues :: Level -> Position -> Level
 removeEmptyValues lvl pos
-    | ((elements lvl) M.!? pos) == Nothing = lvl
+    | (replaceKeySelect lvl pos) == True = lvl
     | ((elements lvl) M.! pos) == [] = CreateLevel (M.delete pos (elements lvl))
     | otherwise = lvl
 
@@ -241,7 +244,7 @@ instance Show SomeData where
 
 findSouthSquares :: Level -> Position -> [SomeData]
 findSouthSquares lvl pos
-        | ((elements lvl) M.!? pos) == Nothing = []
+        | (replaceKeySelect lvl pos) == True = []
         | [] == (getSquares lvl pos) = []
         | otherwise = (CreateData pos newpos sqr) : (findSouthSquares lvl newpos)
                     where sqr = (head (getSquares lvl pos))
@@ -249,7 +252,7 @@ findSouthSquares lvl pos
 
 findNorthSquares :: Level -> Position -> [SomeData]
 findNorthSquares lvl pos
-        | ((elements lvl) M.!? pos) == Nothing = []
+        | (replaceKeySelect lvl pos) == True = []
         | [] == (getSquares lvl pos) = []
         | otherwise = (CreateData pos newpos sqr) : (findNorthSquares lvl newpos)
                     where sqr = (head (getSquares lvl pos))
@@ -257,7 +260,7 @@ findNorthSquares lvl pos
 
 findEastSquares :: Level -> Position -> [SomeData]
 findEastSquares lvl pos
-        | ((elements lvl) M.!? pos) == Nothing = []
+        | (replaceKeySelect lvl pos) == True = []
         | [] == (getSquares lvl pos) = []
         | otherwise = (CreateData pos newpos sqr) : (findEastSquares lvl newpos)
                     where sqr = (head (getSquares lvl pos))
@@ -265,7 +268,7 @@ findEastSquares lvl pos
 
 findWestSquares :: Level -> Position -> [SomeData]
 findWestSquares lvl pos
-        | ((elements lvl) M.!? pos) == Nothing = []
+        | (replaceKeySelect lvl pos) == True = []
         | [] == (getSquares lvl pos) = []
         | otherwise = (CreateData pos newpos sqr) : (findWestSquares lvl newpos)
                     where sqr = (head (getSquares lvl pos))
@@ -282,9 +285,9 @@ getSquareList lvl pos obj
 changePos :: Level -> Position -> Position -> Object -> Level
 changePos lvl oldpos newpos obj
         | Square /= (shape obj) = lvl
-        | ((elements lvl) M.!? oldpos) == Nothing = lvl
+        | (replaceKeySelect lvl oldpos) == True = lvl
         | (notElem obj ((elements lvl) M.! oldpos)) = lvl
-        | ((elements lvl) M.!? newpos) == Nothing =
+        | (replaceKeySelect lvl newpos) == True =
             (removeEmptyValues (CreateLevel (M.insert newpos [obj] (M.insert oldpos (L.delete obj ((elements lvl) M.! oldpos)) (elements lvl)))) oldpos)
         | otherwise = 
             (removeEmptyValues (CreateLevel (M.insert newpos (newobj : ((elements lvl) M.! newpos)) (M.insert oldpos (L.delete obj ((elements lvl) M.! oldpos)) (elements lvl)))) oldpos)
@@ -305,9 +308,9 @@ move :: Position  -- Poziția
      -> Level     -- Nivelul final
 
 move pos lvl 
-    | ((elements lvl) M.!? pos) == Nothing = lvl
+    | (replaceKeySelect lvl pos) == True = lvl
     | [] == (getSquares lvl pos) = lvl  -- daca nu am patrat la pozitia data
-    | ((elements lvl) M.!? (movePosition pos (head (getSquares lvl pos)))) == Nothing =     -- > daca nu am exista pozitia noua
+    | (replaceKeySelect lvl (movePosition pos (head (getSquares lvl pos)))) == True =     -- > daca nu am exista pozitia noua
         (removeEmptyValues (CreateLevel (M.insert (movePosition pos (head (getSquares lvl pos))) [(head (getSquares lvl pos))] 
             (M.insert pos (L.delete (head (getSquares lvl pos)) ((elements lvl) M.! pos)) (elements lvl)))) pos)
     | [] == (getSquares lvl (movePosition pos (head (getSquares lvl pos)))) =  -- daca exista nu exista patrat la pozitia noua
@@ -352,7 +355,8 @@ buildSuccesors lvl pos = if [] == pos
                             ((head pos), (move (head pos) lvl)) : (buildSuccesors lvl (tail pos))   
 
 instance ProblemState Level Position where
-    successors lvl = buildSuccesors lvl (getSquarePositions lvl)
+    successors lvl = if (isGoal lvl) == True then []
+                        else buildSuccesors lvl (getSquarePositions lvl)
 
     isGoal lvl = (numberOfSquares lvl) == (numberValid lvl)
 

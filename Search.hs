@@ -17,8 +17,8 @@ import qualified Data.Set as S
     * nodul părinte, prin explorarea căruia a fost obținut nodul curent;
     * adâncime.
 -}
-data Node s a = UndefinedNode
-    deriving (Eq, Show)
+data Node s a = CreateNode {state :: s, pos :: a}
+    deriving (Eq, Show, Ord)
 
 {-
     *** TODO ***
@@ -26,7 +26,7 @@ data Node s a = UndefinedNode
     Întoarce starea stocată într-un nod.
 -}
 nodeState :: Node s a -> s
-nodeState = undefined
+nodeState node = state node
 
 {-
     *** TODO ***
@@ -40,12 +40,39 @@ nodeState = undefined
     În afara BONUS-ului, puteți ignora parametrul boolean. Pentru BONUS, puteți
     sorta lista succesorilor folosind `sortBy` din Data.List.
 -}
-limitedDfs :: (ProblemState s a, Ord s)
+
+removeDuplicatesTail :: (ProblemState s a, Ord s, Ord a) => [Node s a] -> [Node s a] -> [Node s a]
+removeDuplicatesTail lst acc
+    | [] == lst = acc
+    | (elem (state (head lst)) (map state acc)) = removeDuplicatesTail (tail lst) acc
+    | otherwise = removeDuplicatesTail (tail lst) (acc ++ [head lst])
+
+dfsSuccesor :: (ProblemState s a, Ord s, Ord a) => [(a, s)] -> (S.Set (Node s a)) -> Int -> [Node s a]
+dfsSuccesor succ set depth
+    | succ == [] = []
+    | depth == 0 = []
+    | (S.member node set) = []
+    | otherwise = node : (limitedDfsHelper (state node) (depth - 1) (S.insert node set)) 
+                    ++ (dfsSuccesor (tail succ) (S.insert node set) depth)
+        where 
+            element = head succ
+            node = CreateNode (snd element) (fst element)
+
+limitedDfsHelper :: (ProblemState s a, Ord s, Ord a) => s -> Int -> (S.Set (Node s a)) -> [Node s a]
+limitedDfsHelper lvl depth visited
+    | depth == 0 = []
+    | (isGoal lvl) == True = []
+    | otherwise = removeDuplicatesTail (dfsSuccesor (successors lvl) visited depth) []
+
+
+limitedDfs :: (ProblemState s a, Ord s, Ord a)
            => s           -- Starea inițială
            -> Bool        -- Pentru BONUS, `True` dacă utilizăm euristica
            -> Int         -- Adâncimea maximă de explorare
            -> [Node s a]  -- Lista de noduri
-limitedDfs = undefined
+limitedDfs initialState check depth 
+    | depth == 0 = [(CreateNode initialState undefined)]
+    | otherwise = (CreateNode initialState undefined) : limitedDfsHelper initialState depth S.empty
 
 {-
     *** TODO ***
@@ -63,7 +90,7 @@ iterativeDeepening :: (ProblemState s a, Ord s)
     -> Bool             -- Pentru BONUS, `True` dacă utilizăm euristica
     -> (Node s a, Int)  -- (Nod cu prima stare finală,
                         --  număr de stări nefinale vizitate)
-iterativeDeepening = undefined
+iterativeDeepening state check = undefined
 
 {-
     *** TODO ***
