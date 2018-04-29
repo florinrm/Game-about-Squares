@@ -85,12 +85,51 @@ limitedDfs initialState check depth
 
     În afara BONUS-ului, puteți ignora parametrul boolean.
 -}
-iterativeDeepening :: (ProblemState s a, Ord s)
+
+dfsSuccesorIndex :: (ProblemState s a, Ord s, Ord a) => [(a, s)] -> s -> (S.Set (Node s a)) -> Int -> Int
+dfsSuccesorIndex succ initial set depth
+    | succ == [] = 0
+    | depth == 0 = 1
+    | (S.member node set) = if ((nodeState node) == initial) then 0 else 1
+    | otherwise = 1 + (limitedDfsHelperIndex (state node) initial (depth - 1) (S.insert node set)) 
+                    + (dfsSuccesorIndex (tail succ) initial (S.insert node set) depth)
+        where 
+            element = head succ
+            node = CreateNode (snd element) (fst element)
+
+limitedDfsHelperIndex :: (ProblemState s a, Ord s, Ord a) => s -> s -> Int -> (S.Set (Node s a)) -> Int
+limitedDfsHelperIndex lvl initial depth visited
+    | depth == 0 = 1
+    | (isGoal lvl) == True = 1
+    | otherwise = dfsSuccesorIndex (successors lvl) initial visited depth
+
+
+limitedDfsIndex :: (ProblemState s a, Ord s, Ord a)
+           => s
+           -> s           -- Starea inițială
+           -> Bool        -- Pentru BONUS, `True` dacă utilizăm euristica
+           -> Int         -- Adâncimea maximă de explorare
+           -> Int  -- Lista de noduri
+limitedDfsIndex initialState initial check depth 
+    | depth == 0 = 1
+    | otherwise = 1 + limitedDfsHelperIndex initialState initial depth (S.fromList [CreateNode initialState undefined])
+
+findFirstDepthLvl :: (ProblemState s a, Ord s, Ord a) => s -> Int -> Int
+findFirstDepthLvl lvl depth = 
+        if [] == (filter (\x -> (isGoal x)) (map nodeState (limitedDfs lvl True depth)))
+            then (findFirstDepthLvl lvl (depth + 1))
+            else depth
+
+iterativeDeepening :: (ProblemState s a, Ord s, Ord a)
     => s                -- Starea inițială
     -> Bool             -- Pentru BONUS, `True` dacă utilizăm euristica
     -> (Node s a, Int)  -- (Nod cu prima stare finală,
                         --  număr de stări nefinale vizitate)
-iterativeDeepening state check = undefined
+iterativeDeepening state check = (node, vis - 3)
+            where
+                depth = findFirstDepthLvl state 0
+                vis = limitedDfsIndex state state False depth
+                node = head $ (filter (\x -> (isGoal (nodeState x))) (limitedDfs state True depth))
 
 {-
     *** TODO ***
