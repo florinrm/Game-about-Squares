@@ -361,7 +361,7 @@ instance ProblemState Level Position where
     isGoal lvl = (numberOfSquares lvl) == (numberValid lvl)
 
     -- Doar petru BONUS
-    -- heuristic =
+    heuristic lvl = if (isGoal lvl) then 1 else 0
 {--
         iau patratul, vad ce directie are, iau o pereche ((pos_vechi, pos_nou), object) si fac insertie de pe poz veche pe poz noua (+ faza cu directia lel)
 --}

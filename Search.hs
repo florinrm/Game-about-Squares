@@ -17,7 +17,7 @@ import qualified Data.Set as S
     * nodul părinte, prin explorarea căruia a fost obținut nodul curent;
     * adâncime.
 -}
-data Node s a = CreateNode {state :: s, pos :: a}
+data Node s a = CreateNode s a s Int [s] -- nod, actiune, nodul parinte, adancime, lista cu copii
     deriving (Eq, Show, Ord)
 
 {-
@@ -26,7 +26,19 @@ data Node s a = CreateNode {state :: s, pos :: a}
     Întoarce starea stocată într-un nod.
 -}
 nodeState :: Node s a -> s
-nodeState node = state node
+nodeState (CreateNode s _ _ _ _) = s
+
+nodeAction :: Node s a -> a
+nodeAction (CreateNode _ a _ _ _) = a
+
+parentNode :: Node s a -> s
+parentNode (CreateNode _ _ s _ _) = s
+
+nodeDepth :: Node s a -> Int
+nodeDepth (CreateNode _ _ _ len _) = len
+
+nodeList :: Node s a -> [s]
+nodeList (CreateNode _ _ _ _ list) = list
 
 {-
     *** TODO ***
@@ -41,28 +53,17 @@ nodeState node = state node
     sorta lista succesorilor folosind `sortBy` din Data.List.
 -}
 
-removeDuplicatesTail :: (ProblemState s a, Ord s, Ord a) => [Node s a] -> [Node s a] -> [Node s a]
-removeDuplicatesTail lst acc
-    | [] == lst = acc
-    | (elem (state (head lst)) (map state acc)) = removeDuplicatesTail (tail lst) acc
-    | otherwise = removeDuplicatesTail (tail lst) (acc ++ [head lst])
 
-dfsSuccesor :: (ProblemState s a, Ord s, Ord a) => [(a, s)] -> (S.Set (Node s a)) -> Int -> [Node s a]
-dfsSuccesor succ set depth
-    | succ == [] = []
-    | depth == 0 = []
-    | (S.member node set) = []
-    | otherwise = node : (limitedDfsHelper (state node) (depth - 1) (S.insert node set)) 
-                    ++ (dfsSuccesor (tail succ) (S.insert node set) depth)
-        where 
-            element = head succ
-            node = CreateNode (snd element) (fst element)
-
-limitedDfsHelper :: (ProblemState s a, Ord s, Ord a) => s -> Int -> (S.Set (Node s a)) -> [Node s a]
-limitedDfsHelper lvl depth visited
-    | depth == 0 = []
-    | (isGoal lvl) == True = []
-    | otherwise = removeDuplicatesTail (dfsSuccesor (successors lvl) visited depth) []
+limitedDfsHelper :: (ProblemState s a, Ord s, Ord a) => [Node s a] -> [Node s a] -> S.Set s -> Int -> Bool -> [Node s a]
+limitedDfsHelper lvls [] _ _ _ = reverse lvls
+limitedDfsHelper lvls (elem : list) set maxDepth check
+    | ((S.member node set) || (depth > maxDepth)) = limitedDfsHelper lvls list set maxDepth check
+    | ((isGoal node) && (check == True)) = limitedDfsHelper ((head lvls) : elem : (tail lvls)) (elements ++ list) (S.insert node set) maxDepth check
+    | otherwise = limitedDfsHelper (elem : lvls) (elements ++ list) (S.insert node set) maxDepth check
+        where
+            node = nodeState elem
+            depth = nodeDepth elem
+            elements = [CreateNode state action node (depth + 1) (state : (nodeList elem)) | action <- (map fst (successors node)), state <- (map snd (successors node))] 
 
 
 limitedDfs :: (ProblemState s a, Ord s, Ord a)
@@ -70,9 +71,7 @@ limitedDfs :: (ProblemState s a, Ord s, Ord a)
            -> Bool        -- Pentru BONUS, `True` dacă utilizăm euristica
            -> Int         -- Adâncimea maximă de explorare
            -> [Node s a]  -- Lista de noduri
-limitedDfs initialState check depth 
-    | depth == 0 = [(CreateNode initialState undefined)]
-    | otherwise = (CreateNode initialState undefined) : limitedDfsHelper initialState depth S.empty
+limitedDfs initialState check depth = limitedDfsHelper [] [(CreateNode initialState (head (map fst (successors initialState))) initialState 0 [initialState])] S.empty depth check
 
 {-
     *** TODO ***
@@ -86,50 +85,29 @@ limitedDfs initialState check depth
     În afara BONUS-ului, puteți ignora parametrul boolean.
 -}
 
-dfsSuccesorIndex :: (ProblemState s a, Ord s, Ord a) => [(a, s)] -> s -> (S.Set (Node s a)) -> Int -> Int
-dfsSuccesorIndex succ initial set depth
-    | succ == [] = 0
-    | depth == 0 = 1
-    | (S.member node set) = if ((nodeState node) == initial) then 0 else 1
-    | otherwise = 1 + (limitedDfsHelperIndex (state node) initial (depth - 1) (S.insert node set)) 
-                    + (dfsSuccesorIndex (tail succ) initial (S.insert node set) depth)
-        where 
-            element = head succ
-            node = CreateNode (snd element) (fst element)
-
-limitedDfsHelperIndex :: (ProblemState s a, Ord s, Ord a) => s -> s -> Int -> (S.Set (Node s a)) -> Int
-limitedDfsHelperIndex lvl initial depth visited
-    | depth == 0 = 1
-    | (isGoal lvl) == True = 1
-    | otherwise = dfsSuccesorIndex (successors lvl) initial visited depth
-
-
-limitedDfsIndex :: (ProblemState s a, Ord s, Ord a)
-           => s
-           -> s           -- Starea inițială
-           -> Bool        -- Pentru BONUS, `True` dacă utilizăm euristica
-           -> Int         -- Adâncimea maximă de explorare
-           -> Int  -- Lista de noduri
-limitedDfsIndex initialState initial check depth 
-    | depth == 0 = 1
-    | otherwise = 1 + limitedDfsHelperIndex initialState initial depth (S.fromList [CreateNode initialState undefined])
-
-findFirstDepthLvl :: (ProblemState s a, Ord s, Ord a) => s -> Int -> Int
-findFirstDepthLvl lvl depth = 
-        if [] == (filter (\x -> (isGoal x)) (map nodeState (limitedDfs lvl True depth)))
-            then (findFirstDepthLvl lvl (depth + 1))
-            else depth
+getIndex :: Eq s => s -> [s] -> Int
+getIndex state listStates = foldl (\acc elem -> if (fst elem) == state then snd elem else acc) 0 (zip listStates [0..(length listStates) - 1])
+                                            
+getNode :: Eq s => s -> [Node s a] -> Node s a
+getNode state listStates = head (filter (\elem -> (nodeState elem) == state) listStates)
 
 iterativeDeepening :: (ProblemState s a, Ord s, Ord a)
     => s                -- Starea inițială
     -> Bool             -- Pentru BONUS, `True` dacă utilizăm euristica
     -> (Node s a, Int)  -- (Nod cu prima stare finală,
                         --  număr de stări nefinale vizitate)
-iterativeDeepening state check = (node, vis - 3)
-            where
-                depth = findFirstDepthLvl state 0
-                vis = limitedDfsIndex state state False depth
-                node = head $ (filter (\x -> (isGoal (nodeState x))) (limitedDfs state True depth))
+iterativeDeepening s b = foldl (\acc depth -> let goal = filter (isGoal) (map (nodeState) (limitedDfs s b depth)) in          
+                                                if (not ((nodeState (fst acc)) == s)) 
+                                                    then acc 
+                                                else if (not ((length goal) == 0))                 
+                                                    then ((CreateNode (head goal) randomValue s depth (nodeList (getNode (head goal) (limitedDfs s b depth)))), 
+                                                        ((snd acc) + (getIndex (head goal) (map (nodeState) (limitedDfs s b depth)))))
+                                                else 
+                                                    ((CreateNode s randomValue s 0 []), ((snd acc) + (length (limitedDfs s b depth))))) ((CreateNode s randomValue s 0 []), 0) [0..999]
+                                                    
+    where
+        randomValue = head (map (fst) (successors s))
+            
 
 {-
     *** TODO ***
@@ -140,8 +118,18 @@ iterativeDeepening state check = (node, vis - 3)
     Întoarce o listă de perechi (acțiune, stare), care se încheie în starea
     finală, dar care EXCLUDE starea inițială.
 -}
-extractPath :: Node s a -> [(a, s)]
-extractPath = undefined
+
+filterAction :: (Ord s) => [(a, s)] -> s -> a
+filterAction list state = fst (head (filter (\lel -> state == (snd lel)) list))
+
+
+
+extractPath :: (ProblemState s a, Ord s, Ord a) => Node s a -> [(a, s)]
+extractPath (CreateNode _ _ _ _ list) = reverse (snd (foldl (\acc lel -> (lel, ((filterAction (successors (fst acc)) lel), lel) : (snd acc))) (headList, []) restList))
+            where
+                revList = reverse list
+                headList = head revList
+                restList = tail revList
 
 {-
     Poate fi utilizată pentru afișarea fiecărui element al unei liste
